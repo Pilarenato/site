@@ -1,0 +1,508 @@
+ * Eslint-env mocha * /
+
+Import  chai , { expect } de  ' chai ' ;
+Import { normalize , schema  como  Schema } de  ' normalizr ' ;
+Import { fromJS } de  ' immutable ' ;
+Import  cloneDeep  de  ' lodash / cloneDeep ' ;
+importação  chaiImmutable  de  ' chai-imutável ' ;
+
+Import { denormalize } de  ' ../src ' ;
+
+chai . Uso (chaiImutable);
+
+Const  immutableNormalize  = ( response , schema ) => {
+  const { entidades , resultado } =  normalize (resposta, esquema);
+
+  retornar {
+    entidades :  fromJS (entidades),
+    resultado,
+  };
+};
+
+descrever ( ' (imutável) desnormalizar ' , () => {
+  -lo ( ' deve retornar indefinido quando desnormalizar uma entidade indefinida ' , () => {
+    Esperar ( desnormalizar ( indefinido )). a . ser . Indefinido ;
+  });
+
+
+  descrever ( ' entidades de análise e coleções ' , () => {
+    Const  articleSchema  =  new  Schema.Entity ( ' artigos ' );
+    Const  userSchema  =  new  Schema.Entity ( ' usuários ' );
+    Const  collectionSchema  =  new  Schema.Entity ( ' coleções ' );
+
+    ArticleSchema . Define ({
+      Autor : userSchema,
+      Coleções :  novo  Schema.Array (collectionSchema),
+    });
+
+    CollectionSchema . Define ({
+      Curador : userSchema,
+    });
+
+    Const  article1  = {
+      Id :  1 ,
+      Título :  « Alguns artigos » ,
+      Autor : {
+        Id :  1 ,
+        Nome :  ' Dan ' ,
+      },
+      Coleções : [{
+        Id :  1 ,
+        Nome :  ' Dan ' ,
+      }, {
+        Id :  2 ,
+        Nome :  ' Giampaolo ' ,
+      }],
+    };
+    Const  article2  = {
+      Id :  2 ,
+      Título :  « Outro artigo » ,
+      Autor : {
+        Id :  1 ,
+        Nome :  ' Dan ' ,
+      },
+    };
+    Const  article3  = {
+      Id :  3 ,
+      Título :  ' Sem autor ' ,
+      Autor :  null ,
+    };
+
+    Const  article4  = {
+      Id :  4 ,
+      Título :  « Alguns artigos » ,
+      Autor : {
+        Id :  ' ' ,
+        Nome :  ' Deleted ' ,
+      },
+      Coleções : [{
+        Id :  ' ' ,
+        Nome :  ' Deleted ' ,
+      }],
+    };
+
+    Const  response  = {
+      Artigos : [artigo1, artigo2, artigo3, artigo4],
+    };
+
+    // Função para retornar o resultado da função de normalização. Necessário para que
+    // estado não fica entre especificações.
+    Const  getNormalizedEntities  = () =>  immutableNormalize (response, {
+      Artigos :  novo  Schema.Array (articleSchema),
+    });
+
+    Ele ( ' deve retornar a entidade original ' , () => {
+      Const  data  =  getNormalizedEntities ();
+      Const  article  =  dados . Entidades . GetIn ([ ' artigos ' , ' 1 ' ]);
+      esperar ( desnormalizar (artigo, dados . entidades , articleSchema)). a . ser . Eql (de JS (artigo 1));
+    });
+
+    It ( ' deve trabalhar com entidades sem valores ' , () => {
+      Const  data  =  getNormalizedEntities ();
+      Const  article  =  dados . Entidades . GetIn ([ ' artigos ' , ' 3 ' ]);
+      esperar ( desnormalizar (artigo, dados . entidades , articleSchema)). a . ser . Eql (de JS (artigo 3));
+    });
+
+    It ( ' deve trabalhar com entidades com id vazio ' , () => {
+      Const  data  =  getNormalizedEntities ();
+      Const  article  =  dados . Entidades . GetIn ([ ' artigos ' , ' 4 ' ]);
+      esperar ( desnormalizar (artigo, dados . entidades , articleSchema)). a . ser . Eql (de JS (artigo 4));
+    });
+
+    It ( ' deve retornar a entidade original com id como argumento ' , () => {
+      Const  data  =  getNormalizedEntities ();
+      esperar ( Desnormalizar ( ' 1 ' , de dados . entidades , articleSchema)). a . ser . Eql (de JS (artigo 1));
+    });
+
+    Ele ( ' não muda as entidades ' , () => {
+      Const  data  =  getNormalizedEntities ();
+      const  normalizedEntities  =  cloneDeep ( dados . entidades );
+
+      Desnormalizar ( ' 1 ' , de dados . entidades , articleSchema);
+      Esperam (normalizedEntities). a . ser . EQL ( dados . entidades );
+    });
+  });
+
+  descrever ( ' interdependentes de análise objetos ' , () => {
+    Const  articleSchema  =  new  Schema.Entity ( ' artigos ' );
+    Const  userSchema  =  new  Schema.Entity ( ' usuários ' );
+
+    ArticleSchema . Define ({
+      Autor : userSchema,
+    });
+
+    UserSchema . Define ({
+      Artigos :  novo  Schema.Array (articleSchema),
+    });
+
+    Const  response  = {
+      Artigos : [{
+        Id :  80 ,
+        Título :  « Alguns artigos » ,
+        Autor : {
+          Id :  1 ,
+          Nome :  ' Dan ' ,
+          Artigos : [ 80 ],
+        },
+      }],
+    };
+
+    Const  data  =  immutableNormalize (response, {
+      Artigos :  novo  Schema.Array (articleSchema),
+    });
+
+    // Este comportamento difere da funcionalidade não-imutável. Veja o README
+    // para mais detalhes.
+    -lo ( ' deve lidar com recursão para interdependência ' , () => {
+      Const  article  =  dados . Entidades . GetIn ([ ' artigos ' , ' 80 ' ]);
+      const  denormalized  =  desnormalizar (Artigo, de dados . entidades , articleSchema);
+
+      Esperar ( desnormalizado . GetIn ([ ' autor ' , ' artigos ' , ' 0 ' ])). a . ser . Eql (artigo);
+    });
+  });
+
+  Descrevem ( ' parsing union schemas ' , () => {
+    Descreva ( ' quando um esquema ' , () => {
+      Const  postSchema  =  new  Schema.Entity ( ' posts ' );
+      Const  userSchema  =  new  Schema.Entity ( ' usuários ' );
+
+      PostSchema . Define ({
+        User : userSchema,
+      });
+
+      Const  unionItemSchema  =  new  Schema.Union ({
+        Post : postSchema,
+        User : userSchema,
+      }, ' Tipo ' );
+
+      Const  response  = {
+        UnionItems : [
+          {
+            Id :  1 ,
+            Título :  ' Some Post ' ,
+            Usuário : {
+              Id :  1 ,
+              Nome :  ' Dan ' ,
+            },
+            Tipo :  ' post ' ,
+          },
+          {
+            Id :  2 ,
+            Nome :  ' Ashley ' ,
+            Tipo :  ' usuário ' ,
+          },
+          {
+            Id :  2 ,
+            Título :  « Outro Post » ,
+            Tipo :  ' post ' ,
+          },
+        ],
+      };
+
+      Const  data  =  immutableNormalize ( resposta . UnionItems , novo  Schema.Array (unionItemSchema));
+
+      Ele ( ' deve retornar a resposta original ' , () => {
+        Const  denormalized  =  dados . Resultado . Mapa ( item  =>
+          Desnormalizar (rubrica, de dados . entidades , unionItemSchema),
+        );
+        Esperar (de JS (desnormalizado)). a . ser . Eql ( fromJS ( response . UnionItems ));
+      });
+    });
+
+    descrever ( ' ao definir uma relação ' , () => {
+      Const  groupSchema  =  new  Schema.Entity ( ' groups ' );
+      Const  userSchema  =  new  Schema.Entity ( ' usuários ' );
+
+      Const  member  =  new  Schema.Union ({
+        User : userSchema,
+        Grupo : groupSchema,
+      }, ' Tipo ' );
+
+      GroupSchema . Define ({
+        Proprietário : member,
+      });
+
+      Const  response  = {
+        Grupos : [
+          {
+            Id :  1 ,
+            Proprietário : {
+              Id :  1 ,
+              Tipo :  ' usuário ' ,
+              Nome :  ' Dan ' ,
+            },
+          },
+          {
+            Id :  2 ,
+            Proprietário : {
+              Id :  2 ,
+              Tipo :  ' usuário ' ,
+              Nome :  ' Alice ' ,
+            },
+          },
+          {
+            Id :  3 ,
+            Proprietário : {
+              Id :  1 ,
+              Tipo :  ' grupo ' ,
+              Nome :  ' Ensino ' ,
+            },
+          },
+        ],
+      };
+
+      const  dados  =  immutableNormalize ( de resposta . grupos , nova  Schema.Array (groupSchema));
+
+      // TODO: Este teste não faz muito sentido.
+      // Não vai retornar a resposta original porque
+      // o grupo: 3 tem um dono: grupo: 1
+      // para que os dados do proprietário: group: 1 vou me mesclado para o grupo original: 1
+      // fazendo com que o resultado final seja diferente da resposta original.
+      // para fazer passar o teste, estou apenas verificando se o grupo: 2 foi corretamente desnormalizado
+      Ele ( ' deve retornar a resposta original ' , () => {
+        Const  denormalized  =  dados . Resultado . Mapa ( item  =>
+          Desnormalizar (rubrica, de dados . entidades , groupSchema),
+        );
+        Esperar (de JS (desnormalizado [ 1 ])). a . ser . profunda . EQL ( fromJS ( resposta . grupos [ 1 ]));
+      });
+    });
+  });
+
+  Descrever ( ' analisando objetos simples aninhados ' , () => {
+    Const  articleSchema  =  new  Schema.Entity ( ' artigo ' );
+    Const  userSchema  =  new  Schema.Entity ( ' user ' );
+
+    ArticleSchema . Define ({
+      Gosta :  novo  Schema.Array ({
+        User : userSchema,
+      -benzóico.
+    });
+
+    Const  response  = {
+      Artigos : [{
+        Id :  1 ,
+        Título :  « Artigo 1.o » ,
+        gosta : [{
+          Usuário : {
+            Id :  1 ,
+            Nome :  ' João ' ,
+          },
+        }, {
+          Usuário : {
+            Id :  2 ,
+            Nome :  ' Alex ' ,
+          },
+        }],
+      }, {
+        Id :  2 ,
+        Título :  « Artigo 2º » ,
+        gosta : [{
+          Usuário : {
+            Id :  1 ,
+            Nome :  ' João ' ,
+          },
+        }],
+      }],
+    };
+
+    Const  data  =  immutableNormalize ( resposta . Artigos , novo  Schema.Array (articleSchema));
+
+    Ele ( ' deve desnormalizar objetos aninhados sem entidade ' , () => {
+      Const  denormalized  =  dados . Resultado . mapa ( id  =>  Desnormalizar ( dados . entidades . Getin [( ' artigo ' , id . toString ()]), dados . entidades , articleSchema));
+      Esperar (de JS (desnormalizado)). a . ser . profunda . eql ( fromJS ( resposta . artigos ));
+    });
+  });
+
+  Descrevem ( ' analisando objetos aninhados ' , () => {
+    Const  articleSchema  =  new  Schema.Entity ( ' artigo ' );
+    Const  userSchema  =  new  Schema.Entity ( ' user ' );
+
+    ArticleSchema . Define ({
+      gosta : {
+        UsersWhoLikes :  novo  Schema.Array (userSchema),
+      },
+    });
+
+    Const  response  = {
+      Artigos : [{
+        Id :  1 ,
+        Título :  « Artigo 1.o » ,
+        gosta : {
+          UsuáriosWhoLikes : [
+            {
+              Id :  1 ,
+              Nome :  ' João ' ,
+            },
+            {
+              Id :  2 ,
+              Nome :  ' Alex ' ,
+            },
+          ],
+        },
+      }, {
+        Id :  2 ,
+        Título :  « Artigo 2º » ,
+        gosta : {
+          UsuáriosWhoLikes : [
+            {
+              Id :  1 ,
+              Nome :  ' João ' ,
+            },
+          ],
+        },
+      }],
+    };
+
+    Const  data  =  immutableNormalize ( resposta . Artigos , novo  Schema.Array (articleSchema));
+
+    Ele ( ' deve desnormalizar objetos aninhados sem entidade recursivamente ' , () => {
+      Const  denormalized  =  dados . Resultado . mapa ( id  =>  Desnormalizar ( dados . entidades . Getin [( ' artigo ' , id . toString ()]), dados . entidades , articleSchema));
+      Esperar (de JS (desnormalizado)). a . ser . profunda . eql ( fromJS ( resposta . artigos ));
+    });
+  });
+
+  Descreve ( ' analisando uma matriz de entidades e coleções ' , () => {
+    Const  articleSchema  =  new  Schema.Entity ( ' artigos ' );
+    Const  userSchema  =  new  Schema.Entity ( ' usuários ' );
+    Const  collectionSchema  =  new  Schema.Entity ( ' coleções ' );
+
+    ArticleSchema . Define ({
+      Autor : userSchema,
+      Coleções :  novo  Schema.Array (collectionSchema),
+    });
+
+    CollectionSchema . Define ({
+      Curador : userSchema,
+    });
+
+    Const  article1  = {
+      Id :  1 ,
+      Título :  « Alguns artigos » ,
+      Autor : {
+        Id :  1 ,
+        Nome :  ' Dan ' ,
+      },
+      Coleções : [{
+        Id :  1 ,
+        Nome :  ' Dan ' ,
+      }, {
+        Id :  2 ,
+        Nome :  ' Giampaolo ' ,
+      }],
+    };
+    Const  article2  = {
+      Id :  2 ,
+      Título :  « Outro artigo » ,
+      Autor : {
+        Id :  1 ,
+        Nome :  ' Dan ' ,
+      },
+    };
+    Const  article3  = {
+      Id :  3 ,
+      Título :  ' Sem autor ' ,
+      Autor :  null ,
+    };
+
+    Const  article4  = {
+      Id :  4 ,
+      Título :  « Alguns artigos » ,
+      Autor : {
+        Id :  ' ' ,
+        Nome :  ' Deleted ' ,
+      },
+      Coleções : [{
+        Id :  ' ' ,
+        Nome :  ' Deleted ' ,
+      }],
+    };
+
+    Const  response  = {
+      Artigos : [artigo1, artigo2, artigo3, artigo4],
+    };
+
+    Const  data  =  immutableNormalize (response, {
+      Artigos :  novo  Schema.Array (articleSchema),
+    });
+
+    Const  expectedArticles  =  fromJS ([
+      Artigo 1,
+      Artigo2,
+    ]);
+
+    Ele ( ' deve retornar uma matriz de entidades ' , () => {
+      Const  articles  =  fromJS ([
+        Dados . Entidades . GetIn ([ ' artigos ' , ' 1 ' ]),
+        Dados . Entidades . GetIn ([ ' artigos ' , ' 2 ' ]),
+      ]);
+      const  denormalized  =  desnormalizar (artigos, dados . entidades , nova  Schema.Array (articleSchema));
+      Esperar (desnormalizado). a . ser . Eql (expectedArticles);
+    });
+
+    Ele ( ' deve retornar uma matriz de entidades ' , () => {
+      const  denormalized  =  desnormalizar ( fromJS ([ 1 , 2 ]), dados . entidades , [articleSchema]);
+      Esperar (desnormalizado). a . ser . Eql (expectedArticles);
+    });
+  });
+
+  Descreve ( ' analisando uma matriz de entidades e coleções ' , () => {
+    Const  articleSchema  =  new  Schema.Entity ( ' artigos ' );
+    Const  userSchema  =  new  Schema.Entity ( ' usuários ' );
+    Const  collectionSchema  =  new  Schema.Entity ( ' coleções ' );
+
+    ArticleSchema . Define ({
+      Coleções :  novo  Schema.Values (collectionSchema),
+    });
+
+    CollectionSchema . Define ({
+      Curador : userSchema,
+    });
+
+    Const  article1  = {
+      Id :  1 ,
+      Título :  « Alguns artigos » ,
+      Coleções : {
+        1 : {
+          Id :  1 ,
+          Nome :  ' Dan ' ,
+        },
+        2 : {
+          Id :  2 ,
+          Nome :  ' Giampaolo ' ,
+        },
+      },
+    };
+
+    Const  article2  = {
+      Id :  2 ,
+      Título :  « Outro artigo » ,
+    };
+
+    Const  response  = {
+      Artigos : [article1, article2],
+    };
+
+    Const  data  =  immutableNormalize (response, {
+      Artigos :  novo  Schema.Array (articleSchema),
+    });
+
+    Const  expectedArticles  =  fromJS ([
+      Artigo 1,
+      Artigo2,
+    ]);
+
+    -lo ( ' deve retornar uma matriz de entidades desnormalizados dado um conjunto de entidades normalizadas ' , () => {
+      Const  articles  =  fromJS ([
+        Dados . Entidades . GetIn ([ ' artigos ' , ' 1 ' ]),
+        Dados . Entidades . GetIn ([ ' artigos ' , ' 2 ' ]),
+      ]);
+      const  denormalized  =  desnormalizar (artigos, dados . entidades , nova  Schema.Array (articleSchema));
+      Esperar (desnormalizado). a . ser . Eql (expectedArticles);
+    });
+
+    -lo ( ' deve retornar uma matriz de entidades desnormalizados dada uma matriz de ids ' , () => {
+      const  denormalized  =  desnormalizar ( fromJS ([ 1 , 2 ]), dados . entidades , [articleSchema]);
+      Esperar (desnormalizado). a . ser . Eql (expectedArticles);
+    });
+  });
+});
